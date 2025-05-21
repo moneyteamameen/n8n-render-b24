@@ -1,3 +1,4 @@
+import { Get, RestController } from '@n8n/decorators';
 import type { Request } from 'express';
 import { access } from 'fs/promises';
 import { join } from 'path';
@@ -5,7 +6,6 @@ import { join } from 'path';
 import config from '@/config';
 import { NODES_BASE_DIR } from '@/constants';
 import { CredentialTypes } from '@/credential-types';
-import { Get, RestController } from '@/decorators';
 import { BadRequestError } from '@/errors/response-errors/bad-request.error';
 import { InternalServerError } from '@/errors/response-errors/internal-server.error';
 
@@ -54,7 +54,7 @@ export class TranslationController {
 			// eslint-disable-next-line @typescript-eslint/no-unsafe-return
 			return require(NODE_HEADERS_PATH);
 		} catch (error) {
-			throw new InternalServerError('Failed to load headers file');
+			throw new InternalServerError('Failed to load headers file', error);
 		}
 	}
 }

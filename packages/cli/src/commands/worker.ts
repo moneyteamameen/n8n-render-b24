@@ -1,18 +1,17 @@
+import { inTest } from '@n8n/backend-common';
+import { Container } from '@n8n/di';
 import { Flags, type Config } from '@oclif/core';
-import { Container } from 'typedi';
 
 import config from '@/config';
-import { N8N_VERSION, inTest } from '@/constants';
-import { WorkerMissingEncryptionKey } from '@/errors/worker-missing-encryption-key.error';
+import { N8N_VERSION } from '@/constants';
 import { EventMessageGeneric } from '@/eventbus/event-message-classes/event-message-generic';
 import { MessageEventBus } from '@/eventbus/message-event-bus/message-event-bus';
 import { LogStreamingEventRelay } from '@/events/relays/log-streaming.event-relay';
-import { Logger } from '@/logging/logger.service';
+import { Publisher } from '@/scaling/pubsub/publisher.service';
 import { PubSubHandler } from '@/scaling/pubsub/pubsub-handler';
 import { Subscriber } from '@/scaling/pubsub/subscriber.service';
 import type { ScalingService } from '@/scaling/scaling.service';
 import type { WorkerServerEndpointsConfig } from '@/scaling/worker-server';
-import { OrchestrationService } from '@/services/orchestration.service';
 
 import { BaseCommand } from './base-command';
 
@@ -41,6 +40,8 @@ export class Worker extends BaseCommand {
 
 	override needsCommunityPackages = true;
 
+	override needsTaskRunner = true;
+
 	/**
 	 * Stop n8n in a graceful way.
 	 * Make for example sure that all the webhooks from third party services
@@ -50,7 +51,7 @@ export class Worker extends BaseCommand {
 		this.logger.info('Stopping worker...');
 
 		try {
-			await this.externalHooks?.run('n8n.stop', []);
+			await this.externalHooks?.run('n8n.stop');
 		} catch (error) {
 			await this.exitWithCrash('Error shutting down worker', error);
 		}
@@ -59,15 +60,13 @@ export class Worker extends BaseCommand {
 	}
 
 	constructor(argv: string[], cmdConfig: Config) {
-		if (!process.env.N8N_ENCRYPTION_KEY) throw new WorkerMissingEncryptionKey();
-
 		if (config.getEnv('executions.mode') !== 'queue') {
 			config.set('executions.mode', 'queue');
 		}
 
 		super(argv, cmdConfig);
 
-		this.logger = Container.get(Logger).scoped('scaling');
+		this.logger = this.logger.scoped('scaling');
 	}
 
 	async init() {
@@ -112,12 +111,7 @@ export class Worker extends BaseCommand {
 			}),
 		);
 
-		const { taskRunners: taskRunnerConfig } = this.globalConfig;
-		if (taskRunnerConfig.enabled) {
-			const { TaskRunnerModule } = await import('@/runners/task-runner-module');
-			const taskRunnerModule = Container.get(TaskRunnerModule);
-			await taskRunnerModule.start();
-		}
+		await this.loadModules();
 	}
 
 	async initEventBus() {
@@ -134,12 +128,10 @@ export class Worker extends BaseCommand {
 	 * The subscription connection adds a handler to handle the command messages
 	 */
 	async initOrchestration() {
-		await Container.get(OrchestrationService).init();
+		Container.get(Publisher);
 
 		Container.get(PubSubHandler).init();
 		await Container.get(Subscriber).subscribe('n8n.commands');
-
-		this.logger.scoped(['scaling', 'pubsub']).debug('Pubsub setup completed');
 	}
 
 	async setConcurrency() {
@@ -148,6 +140,12 @@ export class Worker extends BaseCommand {
 		const envConcurrency = config.getEnv('executions.concurrency.productionLimit');
 
 		this.concurrency = envConcurrency !== -1 ? envConcurrency : flags.concurrency;
+
+		if (this.concurrency < 5) {
+			this.logger.warn(
+				'Concurrency is set to less than 5. THIS CAN LEAD TO AN UNSTABLE ENVIRONMENT. Please consider increasing it to at least 5 to make best use of the worker.',
+			);
+		}
 	}
 
 	async initScalingService() {

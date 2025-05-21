@@ -2,19 +2,23 @@ import { mock } from 'jest-mock-extended';
 import { v5 as uuidv5, v3 as uuidv3, v4 as uuidv4, v1 as uuidv1 } from 'uuid';
 
 import { STICKY_NODE_TYPE } from '@/Constants';
-import { ApplicationError } from '@/errors';
-import type { IRunData } from '@/Interfaces';
-import { NodeConnectionType, type IWorkflowBase } from '@/Interfaces';
+import { ApplicationError, ExpressionError, NodeApiError } from '@/errors';
+import type { INode, INodeTypeDescription, IRun, IRunData } from '@/Interfaces';
+import { type NodeConnectionType, NodeConnectionTypes, type IWorkflowBase } from '@/Interfaces';
 import * as nodeHelpers from '@/NodeHelpers';
 import {
 	ANONYMIZATION_CHARACTER as CHAR,
+	extractLastExecutedNodeCredentialData,
 	generateNodesGraph,
 	getDomainBase,
 	getDomainPath,
+	resolveAIMetrics,
+	userInInstanceRanOutOfFreeAiCredits,
 } from '@/TelemetryHelpers';
 import { randomInt } from '@/utils';
 
 import { nodeTypes } from './ExpressionExtensions/Helpers';
+import type { NodeTypes } from './NodeTypes';
 
 describe('getDomainBase should return protocol plus domain', () => {
 	test('in valid URLs', () => {
@@ -90,6 +94,7 @@ describe('generateNodesGraph', () => {
 			id: 'NfV4GV9aQTifSLc2',
 			name: 'My workflow 26',
 			active: false,
+			isArchived: false,
 			nodes: [
 				{
 					parameters: {},
@@ -113,7 +118,7 @@ describe('generateNodesGraph', () => {
 			],
 			connections: {
 				'When clicking "Execute Workflow"': {
-					main: [[{ node: 'Google Sheets', type: NodeConnectionType.Main, index: 0 }]],
+					main: [[{ node: 'Google Sheets', type: NodeConnectionTypes.Main, index: 0 }]],
 				},
 			},
 			settings: { executionOrder: 'v1' },
@@ -143,6 +148,7 @@ describe('generateNodesGraph', () => {
 			},
 			nameIndices: { 'When clicking "Execute Workflow"': '0', 'Google Sheets': '1' },
 			webhookNodeNames: [],
+			evaluationTriggerNodeNames: [],
 		});
 	});
 
@@ -153,6 +159,7 @@ describe('generateNodesGraph', () => {
 			id: 'NfV4GV9aQTifSLc2',
 			name: 'My workflow 26',
 			active: false,
+			isArchived: false,
 			nodes: [],
 			connections: {},
 			settings: { executionOrder: 'v1' },
@@ -169,6 +176,7 @@ describe('generateNodesGraph', () => {
 			},
 			nameIndices: {},
 			webhookNodeNames: [],
+			evaluationTriggerNodeNames: [],
 		});
 	});
 
@@ -184,6 +192,7 @@ describe('generateNodesGraph', () => {
 			},
 			nameIndices: {},
 			webhookNodeNames: [],
+			evaluationTriggerNodeNames: [],
 		});
 	});
 
@@ -194,6 +203,7 @@ describe('generateNodesGraph', () => {
 			id: 'NfV4GV9aQTifSLc2',
 			name: 'My workflow 26',
 			active: false,
+			isArchived: false,
 			nodes: [
 				{
 					parameters: {},
@@ -217,7 +227,7 @@ describe('generateNodesGraph', () => {
 			],
 			connections: {
 				'When clicking "Execute Workflow"': {
-					main: [[{ node: 'Google Sheets', type: NodeConnectionType.Main, index: 0 }]],
+					main: [[{ node: 'Google Sheets', type: NodeConnectionTypes.Main, index: 0 }]],
 				},
 			},
 			settings: { executionOrder: 'v1' },
@@ -249,6 +259,7 @@ describe('generateNodesGraph', () => {
 			},
 			nameIndices: { 'When clicking "Execute Workflow"': '0', 'Google Sheets': '1' },
 			webhookNodeNames: [],
+			evaluationTriggerNodeNames: [],
 		});
 	});
 
@@ -259,6 +270,7 @@ describe('generateNodesGraph', () => {
 			id: 'NfV4GV9aQTifSLc2',
 			name: 'My workflow 26',
 			active: false,
+			isArchived: false,
 			nodes: [
 				{
 					parameters: {},
@@ -293,7 +305,7 @@ describe('generateNodesGraph', () => {
 			],
 			connections: {
 				'When clicking "Execute Workflow"': {
-					main: [[{ node: 'Google Sheets', type: NodeConnectionType.Main, index: 0 }]],
+					main: [[{ node: 'Google Sheets', type: NodeConnectionTypes.Main, index: 0 }]],
 				},
 			},
 			settings: { executionOrder: 'v1' },
@@ -325,6 +337,7 @@ describe('generateNodesGraph', () => {
 			},
 			nameIndices: { 'When clicking "Execute Workflow"': '0', 'Google Sheets': '1' },
 			webhookNodeNames: [],
+			evaluationTriggerNodeNames: [],
 		});
 	});
 
@@ -335,6 +348,7 @@ describe('generateNodesGraph', () => {
 			id: 'NfV4GV9aQTifSLc2',
 			name: 'My workflow 26',
 			active: false,
+			isArchived: false,
 			nodes: [
 				{
 					parameters: {},
@@ -371,7 +385,7 @@ describe('generateNodesGraph', () => {
 			],
 			connections: {
 				'When clicking "Execute Workflow"': {
-					main: [[{ node: 'Google Sheets', type: NodeConnectionType.Main, index: 0 }]],
+					main: [[{ node: 'Google Sheets', type: NodeConnectionTypes.Main, index: 0 }]],
 				},
 			},
 			settings: { executionOrder: 'v1' },
@@ -379,6 +393,7 @@ describe('generateNodesGraph', () => {
 			versionId: '70b92d94-0e9a-4b41-9976-a654df420af5',
 		};
 		expect(generateNodesGraph(workflow, nodeTypes)).toEqual({
+			evaluationTriggerNodeNames: [],
 			nodeGraph: {
 				node_types: ['n8n-nodes-base.manualTrigger', 'test.googleSheets'],
 				node_connections: [{ start: '0', end: '1' }],
@@ -442,6 +457,7 @@ describe('generateNodesGraph', () => {
 				notes: {},
 			},
 			webhookNodeNames: [],
+			evaluationTriggerNodeNames: [],
 		});
 	});
 
@@ -465,6 +481,7 @@ describe('generateNodesGraph', () => {
 			pinData: {},
 		};
 		expect(generateNodesGraph(workflow, nodeTypes)).toEqual({
+			evaluationTriggerNodeNames: [],
 			nodeGraph: {
 				node_types: ['n8n-nodes-base.webhook'],
 				node_connections: [],
@@ -511,6 +528,7 @@ describe('generateNodesGraph', () => {
 			pinData: {},
 		};
 		expect(generateNodesGraph(workflow, nodeTypes)).toEqual({
+			evaluationTriggerNodeNames: [],
 			nodeGraph: {
 				node_types: ['n8n-nodes-base.httpRequest'],
 				node_connections: [],
@@ -565,6 +583,7 @@ describe('generateNodesGraph', () => {
 			pinData: {},
 		};
 		expect(generateNodesGraph(workflow, nodeTypes)).toEqual({
+			evaluationTriggerNodeNames: [],
 			nodeGraph: {
 				node_types: ['n8n-nodes-base.httpRequest'],
 				node_connections: [],
@@ -586,6 +605,131 @@ describe('generateNodesGraph', () => {
 			nameIndices: { 'HTTP Request V4 with predefined cred': '0' },
 			webhookNodeNames: [],
 		});
+	});
+
+	it.each([
+		{
+			workflow: {
+				nodes: [
+					{
+						parameters: {
+							mode: 'combineBySql',
+							query: 'SELECT * FROM input1 LEFT JOIN input2 ON input1.name = input2.id',
+						},
+						id: 'b468b603-3e59-4515-b555-90cfebd64d47',
+						name: 'Merge Node V3',
+						type: 'n8n-nodes-base.merge',
+						typeVersion: 3,
+						position: [320, 460],
+					},
+				],
+				connections: {},
+				pinData: {},
+			} as Partial<IWorkflowBase>,
+			isCloudDeployment: false,
+			expected: {
+				nodeGraph: {
+					node_types: ['n8n-nodes-base.merge'],
+					node_connections: [],
+					nodes: {
+						'0': {
+							id: 'b468b603-3e59-4515-b555-90cfebd64d47',
+							type: 'n8n-nodes-base.merge',
+							version: 3,
+							position: [320, 460],
+							operation: 'combineBySql',
+						},
+					},
+					notes: {},
+					is_pinned: false,
+				},
+				nameIndices: { 'Merge Node V3': '0' },
+				webhookNodeNames: [],
+				evaluationTriggerNodeNames: [],
+			},
+		},
+		{
+			workflow: {
+				nodes: [
+					{
+						parameters: {
+							mode: 'append',
+						},
+						id: 'b468b603-3e59-4515-b555-90cfebd64d47',
+						name: 'Merge Node V3',
+						type: 'n8n-nodes-base.merge',
+						typeVersion: 3,
+						position: [320, 460],
+					},
+				],
+				connections: {},
+				pinData: {},
+			} as Partial<IWorkflowBase>,
+			isCloudDeployment: true,
+			expected: {
+				nodeGraph: {
+					node_types: ['n8n-nodes-base.merge'],
+					node_connections: [],
+					nodes: {
+						'0': {
+							id: 'b468b603-3e59-4515-b555-90cfebd64d47',
+							type: 'n8n-nodes-base.merge',
+							version: 3,
+							position: [320, 460],
+							operation: 'append',
+						},
+					},
+					notes: {},
+					is_pinned: false,
+				},
+				nameIndices: { 'Merge Node V3': '0' },
+				webhookNodeNames: [],
+				evaluationTriggerNodeNames: [],
+			},
+		},
+		{
+			workflow: {
+				nodes: [
+					{
+						parameters: {
+							mode: 'combineBySql',
+							query: 'SELECT * FROM input1 LEFT JOIN input2 ON input1.name = input2.id',
+						},
+						id: 'b468b603-3e59-4515-b555-90cfebd64d47',
+						name: 'Merge Node V3',
+						type: 'n8n-nodes-base.merge',
+						typeVersion: 3,
+						position: [320, 460],
+					},
+				],
+				connections: {},
+				pinData: {},
+			} as Partial<IWorkflowBase>,
+			isCloudDeployment: true,
+			expected: {
+				nodeGraph: {
+					node_types: ['n8n-nodes-base.merge'],
+					node_connections: [],
+					nodes: {
+						'0': {
+							id: 'b468b603-3e59-4515-b555-90cfebd64d47',
+							type: 'n8n-nodes-base.merge',
+							version: 3,
+							position: [320, 460],
+							operation: 'combineBySql',
+							sql: 'SELECT * FROM input1 LEFT JOIN input2 ON input1.name = input2.id',
+						},
+					},
+					notes: {},
+					is_pinned: false,
+				},
+				nameIndices: { 'Merge Node V3': '0' },
+				webhookNodeNames: [],
+				evaluationTriggerNodeNames: [],
+			},
+		},
+	])('should return graph with merge v3 node', ({ workflow, expected, isCloudDeployment }) => {
+		expect(generateNodesGraph(workflow, nodeTypes, { isCloudDeployment })).toEqual(expected);
 	});
 
 	test('should return graph with http v1 node', () => {
@@ -624,6 +768,7 @@ describe('generateNodesGraph', () => {
 			},
 			nameIndices: { 'HTTP Request V1': '0' },
 			webhookNodeNames: [],
+			evaluationTriggerNodeNames: [],
 		});
 	});
 
@@ -664,6 +809,7 @@ describe('generateNodesGraph', () => {
 			},
 			nameIndices: { 'HTTP Request v4 with defaults': '0' },
 			webhookNodeNames: [],
+			evaluationTriggerNodeNames: [],
 		});
 	});
 
@@ -673,7 +819,7 @@ describe('generateNodesGraph', () => {
 				{
 					parameters: {},
 					id: 'fe69383c-e418-4f98-9c0e-924deafa7f93',
-					name: 'When clicking ‘Test workflow’',
+					name: 'When clicking ‘Execute workflow’',
 					type: 'n8n-nodes-base.manualTrigger',
 					typeVersion: 1,
 					position: [540, 220],
@@ -698,12 +844,12 @@ describe('generateNodesGraph', () => {
 				},
 			],
 			connections: {
-				'When clicking ‘Test workflow’': {
+				'When clicking ‘Execute workflow’': {
 					main: [
 						[
 							{
 								node: 'Chain',
-								type: NodeConnectionType.Main,
+								type: NodeConnectionTypes.Main,
 								index: 0,
 							},
 						],
@@ -714,7 +860,7 @@ describe('generateNodesGraph', () => {
 						[
 							{
 								node: 'Chain',
-								type: NodeConnectionType.AiLanguageModel,
+								type: NodeConnectionTypes.AiLanguageModel,
 								index: 0,
 							},
 						],
@@ -764,11 +910,12 @@ describe('generateNodesGraph', () => {
 				is_pinned: false,
 			},
 			nameIndices: {
-				'When clicking ‘Test workflow’': '0',
+				'When clicking ‘Execute workflow’': '0',
 				Chain: '1',
 				Model: '2',
 			},
 			webhookNodeNames: [],
+			evaluationTriggerNodeNames: [],
 		});
 	});
 
@@ -881,7 +1028,273 @@ describe('generateNodesGraph', () => {
 				notes: {},
 			},
 			webhookNodeNames: [],
+			evaluationTriggerNodeNames: [],
 		});
+	});
+});
+
+describe('extractLastExecutedNodeCredentialData', () => {
+	const cases: Array<[string, IRun]> = [
+		['no data', mock<IRun>({ data: {} })],
+		['no executionData', mock<IRun>({ data: { executionData: undefined } })],
+		[
+			'no nodeExecutionStack',
+			mock<IRun>({ data: { executionData: { nodeExecutionStack: undefined } } }),
+		],
+		[
+			'no node',
+			mock<IRun>({
+				data: { executionData: { nodeExecutionStack: [{ node: undefined }] } },
+			}),
+		],
+		[
+			'no credentials',
+			mock<IRun>({
+				data: { executionData: { nodeExecutionStack: [{ node: { credentials: undefined } }] } },
+			}),
+		],
+	];
+
+	test.each(cases)(
+		'should return credentialId and credentialsType with null if %s',
+		(_, runData) => {
+			expect(extractLastExecutedNodeCredentialData(runData)).toBeNull();
+		},
+	);
+
+	it('should return correct credentialId and credentialsType when last node executed has credential', () => {
+		const runData = mock<IRun>({
+			data: {
+				executionData: {
+					nodeExecutionStack: [{ node: { credentials: { openAiApi: { id: 'nhu-l8E4hX' } } } }],
+				},
+			},
+		});
+
+		expect(extractLastExecutedNodeCredentialData(runData)).toMatchObject(
+			expect.objectContaining({ credentialId: 'nhu-l8E4hX', credentialType: 'openAiApi' }),
+		);
+	});
+});
+
+describe('userInInstanceRanOutOfFreeAiCredits', () => {
+	it('should return false if could not find node credentials', () => {
+		const runData = {
+			status: 'error',
+			mode: 'manual',
+			data: {
+				startData: {
+					destinationNode: 'OpenAI',
+					runNodeFilter: ['OpenAI'],
+				},
+				executionData: {
+					nodeExecutionStack: [{ node: { credentials: {} } }],
+				},
+				resultData: {
+					runData: {},
+					lastNodeExecuted: 'OpenAI',
+					error: new NodeApiError(
+						{
+							id: '1',
+							typeVersion: 1,
+							name: 'OpenAI',
+							type: 'n8n-nodes-base.openAi',
+							parameters: {},
+							position: [100, 200],
+						},
+						{
+							message: `400 - ${JSON.stringify({
+								error: {
+									message: 'error message',
+									type: 'free_ai_credits_request_error',
+									code: 200,
+								},
+							})}`,
+							error: {
+								message: 'error message',
+								type: 'free_ai_credits_request_error',
+								code: 200,
+							},
+						},
+						{
+							httpCode: '400',
+						},
+					),
+				},
+			},
+		} as unknown as IRun;
+
+		expect(userInInstanceRanOutOfFreeAiCredits(runData)).toBe(false);
+	});
+
+	it('should return false if could not credential type it is not openAiApi', () => {
+		const runData = {
+			status: 'error',
+			mode: 'manual',
+			data: {
+				startData: {
+					destinationNode: 'OpenAI',
+					runNodeFilter: ['OpenAI'],
+				},
+				executionData: {
+					nodeExecutionStack: [{ node: { credentials: { jiraApi: { id: 'nhu-l8E4hX' } } } }],
+				},
+				resultData: {
+					runData: {},
+					lastNodeExecuted: 'OpenAI',
+					error: new NodeApiError(
+						{
+							id: '1',
+							typeVersion: 1,
+							name: 'OpenAI',
+							type: 'n8n-nodes-base.openAi',
+							parameters: {},
+							position: [100, 200],
+						},
+						{
+							message: `400 - ${JSON.stringify({
+								error: {
+									message: 'error message',
+									type: 'free_ai_credits_request_error',
+									code: 200,
+								},
+							})}`,
+							error: {
+								message: 'error message',
+								type: 'free_ai_credits_request_error',
+								code: 200,
+							},
+						},
+						{
+							httpCode: '400',
+						},
+					),
+				},
+			},
+		} as unknown as IRun;
+
+		expect(userInInstanceRanOutOfFreeAiCredits(runData)).toBe(false);
+	});
+
+	it('should return false if error is not NodeApiError', () => {
+		const runData = {
+			status: 'error',
+			mode: 'manual',
+			data: {
+				startData: {
+					destinationNode: 'OpenAI',
+					runNodeFilter: ['OpenAI'],
+				},
+				executionData: {
+					nodeExecutionStack: [{ node: { credentials: { openAiApi: { id: 'nhu-l8E4hX' } } } }],
+				},
+				resultData: {
+					runData: {},
+					lastNodeExecuted: 'OpenAI',
+					error: new ExpressionError('error'),
+				},
+			},
+		} as unknown as IRun;
+
+		expect(userInInstanceRanOutOfFreeAiCredits(runData)).toBe(false);
+	});
+
+	it('should return false if error is not a free ai credit error', () => {
+		const runData = {
+			status: 'error',
+			mode: 'manual',
+			data: {
+				startData: {
+					destinationNode: 'OpenAI',
+					runNodeFilter: ['OpenAI'],
+				},
+				executionData: {
+					nodeExecutionStack: [{ node: { credentials: { openAiApi: { id: 'nhu-l8E4hX' } } } }],
+				},
+				resultData: {
+					runData: {},
+					lastNodeExecuted: 'OpenAI',
+					error: new NodeApiError(
+						{
+							id: '1',
+							typeVersion: 1,
+							name: 'OpenAI',
+							type: 'n8n-nodes-base.openAi',
+							parameters: {},
+							position: [100, 200],
+						},
+						{
+							message: `400 - ${JSON.stringify({
+								error: {
+									message: 'error message',
+									type: 'error_type',
+									code: 200,
+								},
+							})}`,
+							error: {
+								message: 'error message',
+								type: 'error_type',
+								code: 200,
+							},
+						},
+						{
+							httpCode: '400',
+						},
+					),
+				},
+			},
+		} as unknown as IRun;
+
+		expect(userInInstanceRanOutOfFreeAiCredits(runData)).toBe(false);
+	});
+
+	it('should return true if the user has ran out of free AI credits', () => {
+		const runData = {
+			status: 'error',
+			mode: 'manual',
+			data: {
+				startData: {
+					destinationNode: 'OpenAI',
+					runNodeFilter: ['OpenAI'],
+				},
+				executionData: {
+					nodeExecutionStack: [{ node: { credentials: { openAiApi: { id: 'nhu-l8E4hX' } } } }],
+				},
+				resultData: {
+					runData: {},
+					lastNodeExecuted: 'OpenAI',
+					error: new NodeApiError(
+						{
+							id: '1',
+							typeVersion: 1,
+							name: 'OpenAI',
+							type: 'n8n-nodes-base.openAi',
+							parameters: {},
+							position: [100, 200],
+						},
+						{
+							message: `400 - ${JSON.stringify({
+								error: {
+									message: 'error message',
+									type: 'free_ai_credits_request_error',
+									code: 400,
+								},
+							})}`,
+							error: {
+								message: 'error message',
+								type: 'free_ai_credits_request_error',
+								code: 400,
+							},
+						},
+						{
+							httpCode: '400',
+						},
+					),
+				},
+			},
+		} as unknown as IRun;
+
+		expect(userInInstanceRanOutOfFreeAiCredits(runData)).toBe(true);
 	});
 });
 
@@ -990,11 +1403,8 @@ function alphanumericId() {
 
 const chooseRandomly = <T>(array: T[]) => array[randomInt(array.length)];
 
-function generateTestWorkflowAndRunData(): { workflow: IWorkflowBase; runData: IRunData } {
-	const workflow: IWorkflowBase = {
-		meta: {
-			instanceId: 'a786b722078489c1fa382391a9f3476c2784761624deb2dfb4634827256d51a0',
-		},
+function generateTestWorkflowAndRunData(): { workflow: Partial<IWorkflowBase>; runData: IRunData } {
+	const workflow: Partial<IWorkflowBase> = {
 		nodes: [
 			{
 				parameters: {},
@@ -1096,9 +1506,7 @@ function generateTestWorkflowAndRunData(): { workflow: IWorkflowBase; runData: I
 			},
 			Switch: {
 				main: [
-					// @ts-ignore
 					null,
-					// @ts-ignore
 					null,
 					[
 						{
@@ -1126,6 +1534,7 @@ function generateTestWorkflowAndRunData(): { workflow: IWorkflowBase; runData: I
 				hints: [],
 				startTime: 1727793340927,
 				executionTime: 0,
+				executionIndex: 0,
 				source: [],
 				executionStatus: 'success',
 				data: { main: [[{ json: {}, pairedItem: { item: 0 } }]] },
@@ -1136,6 +1545,7 @@ function generateTestWorkflowAndRunData(): { workflow: IWorkflowBase; runData: I
 				hints: [],
 				startTime: 1727793340928,
 				executionTime: 0,
+				executionIndex: 1,
 				source: [{ previousNode: 'Execute Workflow Trigger' }],
 				executionStatus: 'success',
 				data: {
@@ -1169,6 +1579,7 @@ function generateTestWorkflowAndRunData(): { workflow: IWorkflowBase; runData: I
 				hints: [],
 				startTime: 1727793340928,
 				executionTime: 1,
+				executionIndex: 2,
 				source: [{ previousNode: 'DebugHelper' }],
 				executionStatus: 'success',
 				data: {
@@ -1200,6 +1611,7 @@ function generateTestWorkflowAndRunData(): { workflow: IWorkflowBase; runData: I
 				hints: [],
 				startTime: 1727793340931,
 				executionTime: 0,
+				executionIndex: 3,
 				source: [{ previousNode: 'Execute Workflow Trigger' }],
 				executionStatus: 'success',
 				data: { main: [[{ json: {}, pairedItem: { item: 0 } }]] },
@@ -1210,6 +1622,7 @@ function generateTestWorkflowAndRunData(): { workflow: IWorkflowBase; runData: I
 				hints: [],
 				startTime: 1727793340929,
 				executionTime: 1,
+				executionIndex: 4,
 				source: [{ previousNode: 'Edit Fields' }],
 				executionStatus: 'success',
 				data: {
@@ -1244,6 +1657,7 @@ function generateTestWorkflowAndRunData(): { workflow: IWorkflowBase; runData: I
 				hints: [],
 				startTime: 1727793340931,
 				executionTime: 0,
+				executionIndex: 5,
 				source: [{ previousNode: 'Edit Fields', previousNodeRun: 1 }],
 				executionStatus: 'success',
 				data: { main: [[], [], [{ json: {}, pairedItem: { item: 0 } }], []] },
@@ -1254,6 +1668,7 @@ function generateTestWorkflowAndRunData(): { workflow: IWorkflowBase; runData: I
 				hints: [],
 				startTime: 1727793340930,
 				executionTime: 0,
+				executionIndex: 6,
 				source: [{ previousNode: 'Switch', previousNodeOutput: 2 }],
 				executionStatus: 'success',
 				data: {
@@ -1270,6 +1685,7 @@ function generateTestWorkflowAndRunData(): { workflow: IWorkflowBase; runData: I
 				hints: [],
 				startTime: 1727793340932,
 				executionTime: 1,
+				executionIndex: 7,
 				source: [{ previousNode: 'Switch', previousNodeOutput: 2, previousNodeRun: 1 }],
 				executionStatus: 'success',
 				data: { main: [[{ json: {}, pairedItem: { item: 0 } }]] },
@@ -1279,3 +1695,109 @@ function generateTestWorkflowAndRunData(): { workflow: IWorkflowBase; runData: I
 
 	return { workflow, runData };
 }
+
+describe('makeAIMetrics', () => {
+	const makeNode = (parameters: object, type: string) =>
+		({
+			parameters,
+			type,
+			typeVersion: 2.1,
+			id: '7cb0b373-715c-4a89-8bbb-3f238907bc86',
+			name: 'a name',
+			position: [0, 0],
+		}) as INode;
+
+	it('should count applicable nodes and parameters', async () => {
+		const nodes = [
+			makeNode(
+				{
+					sendTo: "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('To', ``, 'string') }}",
+					sendTwo: "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('To', ``, 'string') }}",
+					subject: "={{ $fromAI('Subject', ``, 'string') }}",
+				},
+				'n8n-nodes-base.gmailTool',
+			),
+			makeNode(
+				{
+					subject: "={{ $fromAI('Subject', ``, 'string') }}",
+					verb: "={{ $fromAI('Verb', ``, 'string') }}",
+				},
+				'n8n-nodes-base.gmailTool',
+			),
+			makeNode(
+				{
+					subject: "'A Subject'",
+				},
+				'n8n-nodes-base.gmailTool',
+			),
+		];
+
+		const nodeTypes = mock<NodeTypes>({
+			getByNameAndVersion: () => ({
+				description: {
+					codex: {
+						categories: ['AI'],
+						subcategories: { AI: ['Tools'] },
+					},
+				} as unknown as INodeTypeDescription,
+			}),
+		});
+
+		const result = resolveAIMetrics(nodes, nodeTypes);
+		expect(result).toMatchObject({
+			aiNodeCount: 3,
+			aiToolCount: 3,
+			fromAIOverrideCount: 2,
+			fromAIExpressionCount: 3,
+		});
+	});
+
+	it('should not count non-applicable nodes and parameters', async () => {
+		const nodes = [
+			makeNode(
+				{
+					sendTo: 'someone',
+				},
+				'n8n-nodes-base.gmail',
+			),
+		];
+
+		const nodeTypes = mock<NodeTypes>({
+			getByNameAndVersion: () => ({
+				description: {} as unknown as INodeTypeDescription,
+			}),
+		});
+
+		const result = resolveAIMetrics(nodes, nodeTypes);
+		expect(result).toMatchObject({});
+	});
+
+	it('should count ai nodes without tools', async () => {
+		const nodes = [
+			makeNode(
+				{
+					sendTo: 'someone',
+				},
+				'n8n-nodes-base.gmailTool',
+			),
+		];
+
+		const nodeTypes = mock<NodeTypes>({
+			getByNameAndVersion: () => ({
+				description: {
+					codex: {
+						categories: ['AI'],
+					},
+				} as unknown as INodeTypeDescription,
+			}),
+		});
+
+		const result = resolveAIMetrics(nodes, nodeTypes);
+		expect(result).toMatchObject({
+			aiNodeCount: 1,
+			aiToolCount: 0,
+			fromAIOverrideCount: 0,
+			fromAIExpressionCount: 0,
+		});
+	});
+});

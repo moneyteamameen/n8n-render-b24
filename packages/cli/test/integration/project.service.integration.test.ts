@@ -1,7 +1,7 @@
-import Container from 'typedi';
+import { SharedWorkflowRepository } from '@n8n/db';
+import { Container } from '@n8n/di';
 
-import { SharedWorkflowRepository } from '@/databases/repositories/shared-workflow.repository';
-import { ProjectService } from '@/services/project.service';
+import { ProjectService } from '@/services/project.service.ee';
 
 import { linkUserToProject, createTeamProject } from './shared/db/projects';
 import { createUser } from './shared/db/users';
@@ -22,7 +22,13 @@ describe('ProjectService', () => {
 	});
 
 	afterEach(async () => {
-		await testDb.truncate(['User', 'Project', 'ProjectRelation', 'Workflow', 'SharedWorkflow']);
+		await testDb.truncate([
+			'User',
+			'Project',
+			'ProjectRelation',
+			'WorkflowEntity',
+			'SharedWorkflow',
+		]);
 	});
 
 	afterAll(async () => {

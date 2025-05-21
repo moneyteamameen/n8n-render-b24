@@ -1,12 +1,10 @@
-import type { NodeParameterValue } from './Interfaces';
-
 export const DIGITS = '0123456789';
 export const UPPERCASE_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 export const LOWERCASE_LETTERS = UPPERCASE_LETTERS.toLowerCase();
 export const ALPHABET = [DIGITS, UPPERCASE_LETTERS, LOWERCASE_LETTERS].join('');
 
 export const BINARY_ENCODING = 'base64';
-export const WAIT_TIME_UNLIMITED = '3000-01-01T00:00:00.000Z';
+export const WAIT_INDEFINITELY = new Date('3000-01-01T00:00:00.000Z');
 
 export const LOG_LEVELS = ['silent', 'error', 'warn', 'info', 'debug'] as const;
 
@@ -29,6 +27,8 @@ export const NO_OP_NODE_TYPE = 'n8n-nodes-base.noOp';
 export const HTTP_REQUEST_NODE_TYPE = 'n8n-nodes-base.httpRequest';
 export const WEBHOOK_NODE_TYPE = 'n8n-nodes-base.webhook';
 export const MANUAL_TRIGGER_NODE_TYPE = 'n8n-nodes-base.manualTrigger';
+export const EVALUATION_TRIGGER_NODE_TYPE = 'n8n-nodes-base.evaluationTrigger';
+export const EVALUATION_NODE_TYPE = 'n8n-nodes-base.evaluation';
 export const ERROR_TRIGGER_NODE_TYPE = 'n8n-nodes-base.errorTrigger';
 export const START_NODE_TYPE = 'n8n-nodes-base.start';
 export const EXECUTE_WORKFLOW_NODE_TYPE = 'n8n-nodes-base.executeWorkflow';
@@ -48,6 +48,7 @@ export const STARTING_NODE_TYPES = [
 	EXECUTE_WORKFLOW_TRIGGER_NODE_TYPE,
 	ERROR_TRIGGER_NODE_TYPE,
 	START_NODE_TYPE,
+	EVALUATION_TRIGGER_NODE_TYPE,
 ];
 
 export const SCRIPTING_NODE_TYPES = [
@@ -87,35 +88,23 @@ export const LANGCHAIN_CUSTOM_TOOLS = [
 	HTTP_REQUEST_TOOL_LANGCHAIN_NODE_TYPE,
 ];
 
-//nodes that would execute only once with such parameters
-//add 'undefined' to parameters values if it is parameter's default value
-export const SINGLE_EXECUTION_NODES: { [key: string]: { [key: string]: NodeParameterValue[] } } = {
-	'n8n-nodes-base.code': {
-		mode: [undefined, 'runOnceForAllItems'],
-	},
-	'n8n-nodes-base.executeWorkflow': {
-		mode: [undefined, 'once'],
-	},
-	'n8n-nodes-base.crateDb': {
-		operation: [undefined, 'update'], // default insert
-	},
-	'n8n-nodes-base.timescaleDb': {
-		operation: [undefined, 'update'], // default insert
-	},
-	'n8n-nodes-base.microsoftSql': {
-		operation: [undefined, 'update', 'delete'], // default insert
-	},
-	'n8n-nodes-base.questDb': {
-		operation: [undefined], // default insert
-	},
-	'n8n-nodes-base.mongoDb': {
-		operation: ['insert', 'update'],
-	},
-	'n8n-nodes-base.redis': {
-		operation: [undefined], // default info
-	},
-};
-
 export const SEND_AND_WAIT_OPERATION = 'sendAndWait';
 export const AI_TRANSFORM_CODE_GENERATED_FOR_PROMPT = 'codeGeneratedForPrompt';
 export const AI_TRANSFORM_JS_CODE = 'jsCode';
+
+/**
+ * Key for an item standing in for a manual execution data item too large to be
+ * sent live via pubsub. See {@link TRIMMED_TASK_DATA_CONNECTIONS} in constants
+ * in `cli` package.
+ */
+export const TRIMMED_TASK_DATA_CONNECTIONS_KEY = '__isTrimmedManualExecutionDataItem';
+
+export const OPEN_AI_API_CREDENTIAL_TYPE = 'openAiApi';
+export const FREE_AI_CREDITS_ERROR_TYPE = 'free_ai_credits_request_error';
+export const FREE_AI_CREDITS_USED_ALL_CREDITS_ERROR_CODE = 400;
+
+export const FROM_AI_AUTO_GENERATED_MARKER = '/*n8n-auto-generated-fromAI-override*/';
+
+export const PROJECT_ROOT = '0';
+
+export const WAITING_FORMS_EXECUTION_STATUS = 'n8n-execution-status';
